@@ -7,5 +7,7 @@
 # How it works
 
 ## MVP function
-    - A user uploads of his/her own bowling posture video. (taken from right behind the bowler).
-    - Analysis and evaluation of your performing each step will be suggested.
+    - A user uploads his/her own bowling posture video. (recommends video taken from right behind the bowler).
+    - For each step, pose estimation and appreciation result is saved.
+    - Analysis and evaluation of your performing each step will be suggested with proper guide comments.
+
