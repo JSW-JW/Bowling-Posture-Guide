@@ -1,7 +1,7 @@
 # Project Goal
 
 - This app aims to improve your bolwing technique by analyzing and suggesting helpful posture information.
-  - Movement analysis of each step based on 5 step approach. 
+  - Movement analysis of each step based on **5 power step** approach. 
   - Comparison between your posture and desirable posture.
 
 # How it works
