@@ -10,9 +10,9 @@
   - I don't wanna get injured performing wrong posture.
 
 # MVP function
-  - A user uploads his/her own bowling posture video. (recommends video taken from right behind the bowler).
+  - A user uploads his/her own bowling posture video. (Highly recommended to upload video taken right behind the bowler).
   - For each step, pose estimation and appreciation result is saved.
-  - Analysis and evaluation of your performing each step will be suggested with proper guide comments.
+  - Analysis and evaluation of each step will be suggested with proper guide comments.
 
 # Technical Requirements
 
@@ -35,5 +35,5 @@
        First, we should hold all the weight of our body on right foot alone
        Second, left foot should be sliding while keeping the right foot weight entirely.
        Finally, the right foot weight should be shifted to left foot in a second.
-3. guide comments for each power step if the user's pose is right or wrong.
+3. Suggest correction text based on the criteria for each step
   
