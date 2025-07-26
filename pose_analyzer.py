@@ -1,7 +1,7 @@
 import cv2
 import mediapipe as mp
 import time
-from analysis import analyze_torso_angle # analysis.py에서 함수 임포트
+from analysis import analyze_torso_angle, visualize_torso_analysis # 시각화 함수 임포트
 
 # Mediapipe Pose 모델 초기화
 mp_pose = mp.solutions.pose
@@ -13,7 +13,7 @@ pose = mp_pose.Pose(static_image_mode=True,
 def user_driven_step_segmentation(video_path):
     """
     사용자가 's' 키를 눌러 각 스텝의 프레임을 수동으로 지정하고,
-    지정된 프레임의 자세 정보를 저장합니다.
+    월드 랜드마크와 이미지 랜드마크를 모두 저장합니다.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
@@ -53,8 +53,13 @@ def user_driven_step_segmentation(video_path):
                 frame_num = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                 image_rgb = cv2.cvtColor(image_to_show, cv2.COLOR_BGR2RGB)
                 results = pose.process(image_rgb)
-                if results.pose_world_landmarks:
-                    step_data.append({"step": current_step, "frame_number": frame_num, "landmarks": results.pose_world_landmarks})
+                if results.pose_world_landmarks and results.pose_landmarks:
+                    step_data.append({
+                        "step": current_step,
+                        "frame_number": frame_num,
+                        "world_landmarks": results.pose_world_landmarks, # 계산용
+                        "image_landmarks": results.pose_landmarks      # 시각화용
+                    })
                     print(f"Step {current_step} marked at frame {frame_num}.")
                     current_step += 1
                 else:
@@ -72,7 +77,8 @@ def user_driven_step_segmentation(video_path):
 
 def replay_step_segments(video_path, steps_data, analysis_results):
     """
-    사용자가 'n'키를 누를 때마다 다음 스텝 구간을 재생하며, 분석 데이터를 화면에 표시합니다.
+    사용자가 'n'키를 누를 때마다 다음 스텝 구간을 재생하며, 
+    재생 후에는 분석 데이터를 2초간 보여준 뒤 입력을 대기합니다.
     """
     if not steps_data:
         print("No steps were marked. Cannot replay.")
@@ -101,7 +107,7 @@ def replay_step_segments(video_path, steps_data, analysis_results):
             if not ret:
                 break
             
-            last_frame_in_segment = frame.copy() # 마지막 프레임 저장
+            last_frame_in_segment = frame.copy()
             
             cv2.putText(frame, seg['label'], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
             
@@ -117,10 +123,19 @@ def replay_step_segments(video_path, steps_data, analysis_results):
                 print("Replay interrupted by user.")
                 return
         
-        # 구간 재생 후 마지막 프레임에서 대기
         if last_frame_in_segment is not None:
+            cv2.putText(last_frame_in_segment, seg['label'], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            step_angle = angles.get(seg['step_num'])
+            if step_angle is not None:
+                angle_text = f"Torso Angle (Step {seg['step_num']}): {step_angle:.2f} deg"
+                cv2.putText(last_frame_in_segment, angle_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+            
+            cv2.imshow('Segment Replay', last_frame_in_segment)
+            cv2.waitKey(2000)
+
             cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2, cv2.LINE_AA)
             cv2.imshow('Segment Replay', last_frame_in_segment)
+            
             while True:
                 key = cv2.waitKey(0) & 0xFF
                 if key == ord('n'):
@@ -137,9 +152,12 @@ def replay_step_segments(video_path, steps_data, analysis_results):
 
 
 if __name__ == '__main__':
+    # --- 중요 ---
+    # 이곳에 분석하고 싶은 볼링 동영상 파일의 경로를 입력하세요.
+    # 예: video_file = 'videos/my_bowling.mp4'
     video_file = 'static/videos/IMG_1564.MP4'
     
-    if video_file == 'path/to/your/video.mp4':
+    if video_file == 'path/to/your/video.py':
         print("Please update the 'video_file' variable in the script with the path to your video.")
     else:
         marked_steps = user_driven_step_segmentation(video_file)
@@ -154,6 +172,17 @@ if __name__ == '__main__':
             for feedback in torso_analysis_result.get("feedback", []):
                 print(f"- {feedback}")
             print("---------------------------------")
+
+            # 분석 결과 시각화
+            print("\nDisplaying analysis visualization...")
+            annotated_images = visualize_torso_analysis(video_file, marked_steps, torso_analysis_result)
+            for i, img in enumerate(annotated_images):
+                # 각 스텝별로 고유한 창 이름을 생성하여 이미지를 별도의 창에 표시
+                cv2.imshow(f"Torso Analysis - Step {i+3}", img)
+            
+            print("Press any key to exit visualization.")
+            cv2.waitKey(0)
+            cv2.destroyAllWindows()
 
         elif marked_steps:
             print(f"\nOnly {len(marked_steps)} steps were marked. Please mark all 5 steps to proceed.")
