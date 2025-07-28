@@ -1,7 +1,7 @@
 import cv2
 import mediapipe as mp
 import time
-from analysis import analyze_torso_angle, visualize_torso_analysis # 시각화 함수 임포트
+from analysis import analyze_torso_angle, analyze_foot_position_from_image, visualize_torso_analysis
 
 # Mediapipe Pose 모델 초기화
 mp_pose = mp.solutions.pose
@@ -57,8 +57,8 @@ def user_driven_step_segmentation(video_path):
                     step_data.append({
                         "step": current_step,
                         "frame_number": frame_num,
-                        "world_landmarks": results.pose_world_landmarks, # 계산용
-                        "image_landmarks": results.pose_landmarks      # 시각화용
+                        "world_landmarks": results.pose_world_landmarks,
+                        "image_landmarks": results.pose_landmarks
                     })
                     print(f"Step {current_step} marked at frame {frame_num}.")
                     current_step += 1
@@ -75,10 +75,10 @@ def user_driven_step_segmentation(video_path):
     print("---------------------------------")
     return step_data
 
-def replay_step_segments(video_path, steps_data, analysis_results):
+def replay_step_segments(video_path, steps_data, torso_analysis, foot_analysis):
     """
-    사용자가 'n'키를 누를 때마다 다음 스텝 구간을 재생하며, 
-    재생 후에는 분석 데이터를 2초간 보여준 뒤 입력을 대기합니다.
+    사용자가 'n'키를 누를 때마다 다음 스텝 구간을 재생하며,
+    분석 데이터와 피드백을 화면에 직접 표시합니다.
     """
     if not steps_data:
         print("No steps were marked. Cannot replay.")
@@ -89,7 +89,8 @@ def replay_step_segments(video_path, steps_data, analysis_results):
         print(f"Error: Could not open video file at {video_path}")
         return
 
-    angles = analysis_results.get('angles', {})
+    angles = torso_analysis.get('angles', {})
+    torso_feedback = torso_analysis.get('feedback', {})
     
     segments = []
     start_frame = 0
@@ -109,41 +110,61 @@ def replay_step_segments(video_path, steps_data, analysis_results):
             
             last_frame_in_segment = frame.copy()
             
-            cv2.putText(frame, seg['label'], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            # --- 현재 프레임에 정보 표시 ---
+            y_offset = 30
+            # 1. 구간 라벨
+            cv2.putText(frame, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            y_offset += 40
             
+            # 2. 각도 수치
             step_angle = angles.get(seg['step_num'])
             if step_angle is not None:
-                angle_text = f"Torso Angle (Step {seg['step_num']}): {step_angle:.2f} deg"
-                cv2.putText(frame, angle_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+                angle_text = f"Torso Angle: {step_angle:.2f} deg"
+                cv2.putText(frame, angle_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+                y_offset += 40
+
+            # 3. 피드백 텍스트
+            current_step_feedback = torso_feedback.get(seg['step_num'], []) + foot_analysis.get(seg['step_num'], [])
+            for text in current_step_feedback:
+                color = (0, 255, 0) if "Good" in text else (0, 0, 255)
+                cv2.putText(frame, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+                y_offset += 30
 
             cv2.imshow('Segment Replay', frame)
             if cv2.waitKey(30) & 0xFF == ord('q'):
                 cap.release()
                 cv2.destroyAllWindows()
-                print("Replay interrupted by user.")
                 return
         
         if last_frame_in_segment is not None:
-            cv2.putText(last_frame_in_segment, seg['label'], (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            # --- 마지막 프레임에 최종 정보 표시 ---
+            y_offset = 30
+            cv2.putText(last_frame_in_segment, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            y_offset += 40
             step_angle = angles.get(seg['step_num'])
             if step_angle is not None:
-                angle_text = f"Torso Angle (Step {seg['step_num']}): {step_angle:.2f} deg"
-                cv2.putText(last_frame_in_segment, angle_text, (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+                angle_text = f"Torso Angle: {step_angle:.2f} deg"
+                cv2.putText(last_frame_in_segment, angle_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+                y_offset += 40
             
+            current_step_feedback = torso_feedback.get(seg['step_num'], []) + foot_analysis.get(seg['step_num'], [])
+            for text in current_step_feedback:
+                color = (0, 255, 0) if "Good" in text else (0, 0, 255)
+                cv2.putText(last_frame_in_segment, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+                y_offset += 30
+
             cv2.imshow('Segment Replay', last_frame_in_segment)
             cv2.waitKey(2000)
 
-            cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, 110), cv2.FONT_HERSHEY_SIMPLEX, 1, (0,0,255), 2, cv2.LINE_AA)
+            cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow('Segment Replay', last_frame_in_segment)
             
             while True:
                 key = cv2.waitKey(0) & 0xFF
-                if key == ord('n'):
-                    break
+                if key == ord('n'): break
                 elif key == ord('q'):
                     cap.release()
                     cv2.destroyAllWindows()
-                    print("Replay interrupted by user.")
                     return
     
     cap.release()
@@ -152,32 +173,30 @@ def replay_step_segments(video_path, steps_data, analysis_results):
 
 
 if __name__ == '__main__':
-    # --- 중요 ---
-    # 이곳에 분석하고 싶은 볼링 동영상 파일의 경로를 입력하세요.
-    # 예: video_file = 'videos/my_bowling.mp4'
     video_file = 'static/videos/IMG_1564.MP4'
     
-    if video_file == 'path/to/your/video.py':
+    if video_file == 'path/to/your/video.mp4':
         print("Please update the 'video_file' variable in the script with the path to your video.")
     else:
         marked_steps = user_driven_step_segmentation(video_file)
         
         if marked_steps and len(marked_steps) == 5:
             torso_analysis_result = analyze_torso_angle(marked_steps)
+            foot_analysis_result = analyze_foot_position_from_image(marked_steps)
             
             print("\nReplaying marked segments with analysis data...")
-            replay_step_segments(video_file, marked_steps, torso_analysis_result)
+            replay_step_segments(video_file, marked_steps, torso_analysis_result, foot_analysis_result)
             
-            print("\n--- Posture Analysis Feedback ---")
-            for feedback in torso_analysis_result.get("feedback", []):
-                print(f"- {feedback}")
-            print("---------------------------------")
+            print("\n--- Final Posture Analysis Summary ---")
+            all_feedback = {**torso_analysis_result.get("feedback", {}), **foot_analysis_result}
+            for step in sorted(all_feedback.keys()):
+                for feedback in all_feedback.get(step, []):
+                    print(f"- Step {step}: {feedback}")
+            print("------------------------------------")
 
-            # 분석 결과 시각화
             print("\nDisplaying analysis visualization...")
             annotated_images = visualize_torso_analysis(video_file, marked_steps, torso_analysis_result)
             for i, img in enumerate(annotated_images):
-                # 각 스텝별로 고유한 창 이름을 생성하여 이미지를 별도의 창에 표시
                 cv2.imshow(f"Torso Analysis - Step {i+3}", img)
             
             print("Press any key to exit visualization.")
