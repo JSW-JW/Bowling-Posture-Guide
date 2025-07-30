@@ -1,14 +1,13 @@
 import cv2
 import mediapipe as mp
 import time
-from analysis import analyze_torso_angle, analyze_foot_position_from_image, visualize_torso_analysis
+from analysis import analyze_torso_angle, analyze_foot_crossover_by_x, visualize_torso_analysis
 
 # Mediapipe Pose 모델 초기화
 mp_pose = mp.solutions.pose
-pose = mp_pose.Pose(static_image_mode=True,
-                    model_complexity=2,
-                    enable_segmentation=True,
-                    min_detection_confidence=0.5)
+mp_drawing = mp.solutions.drawing_utils
+# 리플레이 시 동적 추적을 위해 static_image_mode=False 로 설정
+pose_replay = mp_pose.Pose(static_image_mode=False, model_complexity=2, min_detection_confidence=0.5)
 
 def user_driven_step_segmentation(video_path):
     """
@@ -24,6 +23,9 @@ def user_driven_step_segmentation(video_path):
     current_step = 1
     paused = False
     image_to_show = None
+    
+    # 스텝 지정을 위한 별도의 Pose 인스턴스 (static_image_mode=True)
+    pose_for_marking = mp_pose.Pose(static_image_mode=True, model_complexity=2)
 
     while cap.isOpened():
         if not paused:
@@ -52,7 +54,7 @@ def user_driven_step_segmentation(video_path):
             if current_step <= 5:
                 frame_num = int(cap.get(cv2.CAP_PROP_POS_FRAMES))
                 image_rgb = cv2.cvtColor(image_to_show, cv2.COLOR_BGR2RGB)
-                results = pose.process(image_rgb)
+                results = pose_for_marking.process(image_rgb)
                 if results.pose_world_landmarks and results.pose_landmarks:
                     step_data.append({
                         "step": current_step,
@@ -69,16 +71,17 @@ def user_driven_step_segmentation(video_path):
 
     cap.release()
     cv2.destroyAllWindows()
+    pose_for_marking.close()
     print("\n--- Step Segmentation Summary ---")
     for data in step_data:
         print(f"Step {data['step']}: Frame {data['frame_number']}")
     print("---------------------------------")
     return step_data
 
-def replay_step_segments(video_path, steps_data, torso_analysis, foot_analysis):
+def replay_step_segments(video_path, steps_data, all_analysis):
     """
     사용자가 'n'키를 누를 때마다 다음 스텝 구간을 재생하며,
-    분석 데이터와 피드백을 화면에 직접 표시합니다.
+    랜드마크, 분석 데이터, 피드백, visibility를 화면에 직접 표시합니다.
     """
     if not steps_data:
         print("No steps were marked. Cannot replay.")
@@ -89,8 +92,7 @@ def replay_step_segments(video_path, steps_data, torso_analysis, foot_analysis):
         print(f"Error: Could not open video file at {video_path}")
         return
 
-    angles = torso_analysis.get('angles', {})
-    torso_feedback = torso_analysis.get('feedback', {})
+    angles = all_analysis.get('torso', {}).get('angles', {})
     
     segments = []
     start_frame = 0
@@ -108,55 +110,52 @@ def replay_step_segments(video_path, steps_data, torso_analysis, foot_analysis):
             if not ret:
                 break
             
-            last_frame_in_segment = frame.copy()
+            image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+            results = pose_replay.process(image_rgb)
+            annotated_image = frame.copy()
+            if results.pose_landmarks:
+                mp_drawing.draw_landmarks(annotated_image, results.pose_landmarks, mp_pose.POSE_CONNECTIONS,
+                                          mp_drawing.DrawingSpec(color=(245,117,66), thickness=2, circle_radius=2),
+                                          mp_drawing.DrawingSpec(color=(245,66,230), thickness=2, circle_radius=2))
             
-            # --- 현재 프레임에 정보 표시 ---
             y_offset = 30
-            # 1. 구간 라벨
-            cv2.putText(frame, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
+            cv2.putText(annotated_image, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
             y_offset += 40
             
-            # 2. 각도 수치
             step_angle = angles.get(seg['step_num'])
             if step_angle is not None:
                 angle_text = f"Torso Angle: {step_angle:.2f} deg"
-                cv2.putText(frame, angle_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
+                cv2.putText(annotated_image, angle_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
                 y_offset += 40
 
-            # 3. 피드백 텍스트
-            current_step_feedback = torso_feedback.get(seg['step_num'], []) + foot_analysis.get(seg['step_num'], [])
-            for text in current_step_feedback:
-                color = (0, 255, 0) if "Good" in text else (0, 0, 255)
-                cv2.putText(frame, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+            if results.pose_landmarks:
+                left_ankle_vis = results.pose_landmarks.landmark[mp_pose.PoseLandmark.LEFT_ANKLE].visibility
+                right_ankle_vis = results.pose_landmarks.landmark[mp_pose.PoseLandmark.RIGHT_ANKLE].visibility
+                vis_text = f"L-Ankle Vis: {left_ankle_vis:.2f} | R-Ankle Vis: {right_ankle_vis:.2f}"
+                cv2.putText(annotated_image, vis_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2, cv2.LINE_AA)
                 y_offset += 30
 
-            cv2.imshow('Segment Replay', frame)
+            current_step_feedback = all_analysis.get('torso',{}).get('feedback',{}).get(seg['step_num'], []) + \
+                                    all_analysis.get('foot',{}).get(seg['step_num'], [])
+            for text in current_step_feedback:
+                color = (0, 255, 0) if "Good" in text else (0, 0, 255)
+                cv2.putText(annotated_image, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
+                y_offset += 30
+            
+            last_frame_in_segment = annotated_image.copy()
+            cv2.imshow('Segment Replay', annotated_image)
+
             if cv2.waitKey(30) & 0xFF == ord('q'):
                 cap.release()
                 cv2.destroyAllWindows()
                 return
         
         if last_frame_in_segment is not None:
-            # --- 마지막 프레임에 최종 정보 표시 ---
-            y_offset = 30
-            cv2.putText(last_frame_in_segment, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 0), 2, cv2.LINE_AA)
-            y_offset += 40
-            step_angle = angles.get(seg['step_num'])
-            if step_angle is not None:
-                angle_text = f"Torso Angle: {step_angle:.2f} deg"
-                cv2.putText(last_frame_in_segment, angle_text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 255), 2, cv2.LINE_AA)
-                y_offset += 40
-            
-            current_step_feedback = torso_feedback.get(seg['step_num'], []) + foot_analysis.get(seg['step_num'], [])
-            for text in current_step_feedback:
-                color = (0, 255, 0) if "Good" in text else (0, 0, 255)
-                cv2.putText(last_frame_in_segment, text, (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2, cv2.LINE_AA)
-                y_offset += 30
-
             cv2.imshow('Segment Replay', last_frame_in_segment)
             cv2.waitKey(2000)
-
-            cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2, cv2.LINE_AA)
+            
+            final_y_pos = last_frame_in_segment.shape[0] - 30
+            cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, final_y_pos), cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 255), 2, cv2.LINE_AA)
             cv2.imshow('Segment Replay', last_frame_in_segment)
             
             while True:
@@ -173,7 +172,7 @@ def replay_step_segments(video_path, steps_data, torso_analysis, foot_analysis):
 
 
 if __name__ == '__main__':
-    video_file = 'static/videos/IMG_1564.MP4'
+    video_file = 'static/videos/후면_2.mov'
     
     if video_file == 'path/to/your/video.mp4':
         print("Please update the 'video_file' variable in the script with the path to your video.")
@@ -181,21 +180,33 @@ if __name__ == '__main__':
         marked_steps = user_driven_step_segmentation(video_file)
         
         if marked_steps and len(marked_steps) == 5:
-            torso_analysis_result = analyze_torso_angle(marked_steps)
-            foot_analysis_result = analyze_foot_position_from_image(marked_steps)
+            all_analysis_results = {
+                "torso": analyze_torso_angle(marked_steps),
+                "foot": analyze_foot_crossover_by_x(marked_steps),
+                # todo: add analyze_stability method
+            }
             
             print("\nReplaying marked segments with analysis data...")
-            replay_step_segments(video_file, marked_steps, torso_analysis_result, foot_analysis_result)
+            replay_step_segments(video_file, marked_steps, all_analysis_results)
             
             print("\n--- Final Posture Analysis Summary ---")
-            all_feedback = {**torso_analysis_result.get("feedback", {}), **foot_analysis_result}
-            for step in sorted(all_feedback.keys()):
-                for feedback in all_feedback.get(step, []):
-                    print(f"- Step {step}: {feedback}")
+            torso_feedback = all_analysis_results['torso'].get('feedback', {})
+            foot_feedback = all_analysis_results['foot']
+            
+            all_feedback_merged = {**torso_feedback, **foot_feedback}
+            for step in sorted(all_feedback_merged.keys()):
+                # Correctly iterate through the feedback lists
+                feedback_lists = [
+                    torso_feedback.get(step, []),
+                    foot_feedback.get(step, []),
+                ]
+                for feedback_list in feedback_lists:
+                    for feedback in feedback_list:
+                        print(f"- Step {step}: {feedback}")
             print("------------------------------------")
 
             print("\nDisplaying analysis visualization...")
-            annotated_images = visualize_torso_analysis(video_file, marked_steps, torso_analysis_result)
+            annotated_images = visualize_torso_analysis(video_file, marked_steps, all_analysis_results['torso'])
             for i, img in enumerate(annotated_images):
                 cv2.imshow(f"Torso Analysis - Step {i+3}", img)
             
@@ -205,3 +216,5 @@ if __name__ == '__main__':
 
         elif marked_steps:
             print(f"\nOnly {len(marked_steps)} steps were marked. Please mark all 5 steps to proceed.")
+    
+    pose_replay.close()
