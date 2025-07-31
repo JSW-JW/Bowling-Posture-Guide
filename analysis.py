@@ -100,20 +100,22 @@ def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
         min_crossover_threshold = THRESHOLDS[step_num]["MIN_CROSSOVER_RATIO"]
         max_crossover_threshold = THRESHOLDS[step_num]["MAX_CROSSOVER_RATIO"]
         
+        left_foot_x = lm[LEFT_FOOT_INDEX].x
         left_ankle_x = lm[LEFT_ANKLE].x
         right_ankle_x = lm[RIGHT_ANKLE].x
         
         # 정규화 기준을 '골반 너비'로 변경
         hip_width = abs(lm[LEFT_HIP].x - lm[RIGHT_HIP].x)
         
-        crossover_distance = right_ankle_x - left_ankle_x
-        crossover_ratio = (crossover_distance / hip_width) if hip_width > 0 else 0
+        # crossover_distance = right_ankle_x - left_ankle_x
+        # crossover_distance = right_ankle_x - left_ankle_x
+        # crossover_ratio = (crossover_distance / hip_width) if hip_width > 0 else 0
         
-        if min_crossover_threshold <= crossover_ratio <= max_crossover_threshold:
-            feedback[step_num].append(f"[Foot] Good: Step {step_num} crossover is sufficient (Ratio: {crossover_ratio:.2f})")
+        # if min_crossover_threshold <= crossover_ratio <= max_crossover_threshold:
+        if left_foot_x + 0.08 < right_ankle_x:
+            feedback[step_num].append(f"[Foot] Advice: {step_num}, left_foot_x: {left_foot_x} right_ankle_x: {right_ankle_x}")
         else:
-            # feedback[step_num].append(f"[Foot] Advice: crossover ratio needs adjustment in Step {step_num}\n(Ratio: {crossover_ratio:.2f}, Needed > {min_crossover_threshold}, {max_crossover_threshold})")
-            feedback[step_num].append(f"[Foot] Advice: {step_num}\n(Ratio: {crossover_ratio:.2f}, Needed > {min_crossover_threshold}, {max_crossover_threshold})")
+            feedback[step_num].append(f"[Foot] Good: Step {step_num} crossover is sufficient, left_foot_x: {left_foot_x} right_ankle_x: {right_ankle_x}")
 
     # --- 3스텝 (교차 안 함) 로직 ---
     lm3 = landmarks_dict[3]
