@@ -1,6 +1,8 @@
 import cv2
 import mediapipe as mp
 import time
+import numpy as np
+from typing import Union, List, Dict, Any
 from analysis import analyze_torso_angle, analyze_foot_crossover_by_x, visualize_torso_analysis
 
 # Mediapipe Pose 모델 초기화
@@ -266,7 +268,7 @@ if __name__ == '__main__':
             print("\nDisplaying analysis visualization...")
             annotated_images = visualize_torso_analysis(video_file, marked_steps, all_analysis_results['torso'])
             for i, img in enumerate(annotated_images):
-                cv2.imshow(f"Torso Analysis - Step {i+3}", img)
+                cv2.imshow(f"Torso Analysis - Step {i+2}", img)
             
             print("Press any key to exit visualization.")
             cv2.waitKey(0)

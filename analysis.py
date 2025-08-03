@@ -25,7 +25,7 @@ def calculate_torso_tilt_from_image(landmarks) -> float:
     shoulder_mid_pt = (shoulder_l + shoulder_r) / 2
     hip_mid_pt = (hip_l + hip_r) / 2
     torso_vector = shoulder_mid_pt - hip_mid_pt
-    angle = np.degrees(np.arctan2(-torso_vector[0], -torso_vector[1]))
+    angle = np.degrees(np.arctan2(torso_vector[0], -torso_vector[1]))
     return angle
 
 def analyze_torso_angle(marked_steps: list) -> dict:
@@ -33,16 +33,18 @@ def analyze_torso_angle(marked_steps: list) -> dict:
     feedback = {3: [], 4: [], 5: []}
     angles = {}
     try:
+        landmarks_step2 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 2)
         landmarks_step3 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 3)
         landmarks_step4 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 4)
         landmarks_step5 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 5)
     except (StopIteration, KeyError):
         return {"feedback": {3:["Torso analysis error"], 4:["Torso analysis error"], 5:["Torso analysis error"]}, "angles": angles}
 
+    angle_step2 = calculate_torso_tilt_from_image(landmarks_step2)
     angle_step3 = calculate_torso_tilt_from_image(landmarks_step3)
     angle_step4 = calculate_torso_tilt_from_image(landmarks_step4)
     angle_step5 = calculate_torso_tilt_from_image(landmarks_step5)
-    angles = {3: angle_step3, 4: angle_step4, 5: angle_step5}
+    angles = {2: angle_step2, 3: angle_step3, 4: angle_step4, 5: angle_step5}
 
     if angle_step4 > angle_step3 + 5:
         feedback[4].append("[Torso] Good: Proper tilt.")
@@ -130,13 +132,13 @@ def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
     return feedback
 
 def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_results: dict):
-    """스텝 3, 4, 5의 프레임 위에 몸통 벡터와 각도를 그려 시각화합니다."""
+    """스텝 2, 3, 4, 5의 프레임 위에 몸통 벡터와 각도를 그려 시각화합니다."""
     annotated_images = []
     angles = analysis_results.get('angles', {})
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened(): return []
 
-    for step_num in [3, 4, 5]:
+    for step_num in [2, 3, 4, 5]:
         try:
             step_info = next(item for item in marked_steps if item["step"] == step_num)
             frame_num = step_info['frame_number']
