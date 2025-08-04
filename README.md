@@ -23,6 +23,8 @@
        torso angle should be tilted right shifting from 3 step to 4 step
      **4,5 step**
        torso angle in 4 step should be held until the bowl release of 5 step
+
+    ![Torso Angle Analysis 출처: KPBA 신승현 프로](README/torso-angle-analysis.png)
    - foot position
       **2 step**
        right foot should be in line with the left foot
