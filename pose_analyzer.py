@@ -47,6 +47,7 @@ def user_driven_step_segmentation(video_path):
             instruction = "All steps marked. Press 'q' to finish."
         
         display_image = image_to_show.copy()
+
         cv2.putText(display_image, instruction, (10, 30), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), line_thickness, cv2.LINE_AA)
         cv2.putText(display_image, f"Current Step: {current_step}/5", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), line_thickness, cv2.LINE_AA)
         cv2.imshow('Bowling Step Marking', display_image)
@@ -133,6 +134,14 @@ def replay_step_segments(video_path, steps_data, all_analysis):
     if not cap.isOpened():
         print(f"Error: Could not open video file at {video_path}")
         return
+    
+    # 추가된 부분: 랜드마크와 색상 정의 (BGR 순서)
+    LANDMARK_COLORS = {
+        mp_pose.PoseLandmark.LEFT_SHOULDER: (0, 0, 255),      # 빨강
+        mp_pose.PoseLandmark.RIGHT_SHOULDER: (0, 165, 255),   # 주황
+        mp_pose.PoseLandmark.LEFT_HIP: (0, 255, 255),         # 노랑
+        mp_pose.PoseLandmark.RIGHT_HIP: (0, 255, 0),         # 초록
+    }    
 
     # 동적 폰트 크기 및 화면 너비 가져오기
     height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -166,6 +175,14 @@ def replay_step_segments(video_path, steps_data, all_analysis):
                                           mp_drawing.DrawingSpec(color=(245,117,66), thickness=line_thickness, circle_radius=line_thickness),
                                           mp_drawing.DrawingSpec(color=(245,66,230), thickness=line_thickness, circle_radius=line_thickness))
             
+                landmarks = results.pose_landmarks.landmark
+                for landmark_enum, color in LANDMARK_COLORS.items():
+                    # 랜드마크의 정규화된 좌표를 실제 픽셀 좌표로 변환
+                    cx = int(landmarks[landmark_enum.value].x * width)
+                    cy = int(landmarks[landmark_enum.value].y * height)
+                    # OpenCV를 사용하여 원(점) 그리기
+                    cv2.circle(annotated_image, (cx, cy), max(5, line_thickness * 5), color, -1)
+
             y_offset = int(30 * font_scale)
             cv2.putText(annotated_image, seg['label'], (10, y_offset), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 0), line_thickness, cv2.LINE_AA)
             y_offset += int(40 * font_scale)

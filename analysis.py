@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 from mediapipe.framework.formats import landmark_pb2
+import mediapipe as mp
 
 # --- 랜드마크 인덱스 정의 ---
 LEFT_SHOULDER = 11
@@ -138,6 +139,20 @@ def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_resul
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened(): return []
 
+    mp_pose = mp.solutions.pose
+    LEFT_SHOULDER = mp_pose.PoseLandmark.LEFT_SHOULDER
+    RIGHT_SHOULDER = mp_pose.PoseLandmark.RIGHT_SHOULDER
+    LEFT_HIP = mp_pose.PoseLandmark.LEFT_HIP
+    RIGHT_HIP = mp_pose.PoseLandmark.RIGHT_HIP
+
+    # 랜드마크와 색상 정의 (BGR 순서)
+    LANDMARK_COLORS = {
+        LEFT_SHOULDER: (0, 0, 255),       # 빨강
+        RIGHT_SHOULDER: (0, 165, 255),    # 주황
+        LEFT_HIP: (0, 255, 255),          # 노랑
+        RIGHT_HIP: (0, 255, 0),           # 초록
+    }
+
     for step_num in [2, 3, 4, 5]:
         try:
             step_info = next(item for item in marked_steps if item["step"] == step_num)
@@ -150,6 +165,13 @@ def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_resul
         if not ret: continue
         
         h, w, _ = frame.shape
+
+        for landmark_enum, color in LANDMARK_COLORS.items():
+            landmark = image_landmarks.landmark[landmark_enum.value]
+            cx = int(landmark.x * w)
+            cy = int(landmark.y * h)
+            cv2.circle(frame, (cx, cy), 10, color, -1)
+
         shoulder_l = image_landmarks.landmark[LEFT_SHOULDER]
         shoulder_r = image_landmarks.landmark[RIGHT_SHOULDER]
         hip_l = image_landmarks.landmark[LEFT_HIP]
