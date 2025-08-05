@@ -31,7 +31,7 @@ def calculate_torso_tilt_from_image(landmarks) -> float:
 
 def analyze_torso_angle(marked_steps: list) -> dict:
     """상체 각도를 분석하고 스텝별 피드백과 각도 값을 반환합니다."""
-    feedback = {3: [], 4: [], 5: []}
+    feedback = {2: [], 3: [], 4: [], 5: []}
     angles = {}
     try:
         landmarks_step2 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 2)
@@ -39,7 +39,7 @@ def analyze_torso_angle(marked_steps: list) -> dict:
         landmarks_step4 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 4)
         landmarks_step5 = next(item['image_landmarks'] for item in marked_steps if item["step"] == 5)
     except (StopIteration, KeyError):
-        return {"feedback": {3:["Torso analysis error"], 4:["Torso analysis error"], 5:["Torso analysis error"]}, "angles": angles}
+        return {"feedback": {2:["Torso analysis error"], 3:["Torso analysis error"], 4:["Torso analysis error"], 5:["Torso analysis error"]}, "angles": angles}
 
     angle_step2 = calculate_torso_tilt_from_image(landmarks_step2)
     angle_step3 = calculate_torso_tilt_from_image(landmarks_step3)
@@ -47,11 +47,16 @@ def analyze_torso_angle(marked_steps: list) -> dict:
     angle_step5 = calculate_torso_tilt_from_image(landmarks_step5)
     angles = {2: angle_step2, 3: angle_step3, 4: angle_step4, 5: angle_step5}
 
+    if angle_step3 > angle_step2:
+        feedback[3].append("[Torso] Good: Proper tilt. Step3 torso angle > Step 2 torso angle")
+    else:
+        feedback[3].append("[Torso] Advice: Tilt more.")
+
     if angle_step4 > angle_step3 + 5:
         feedback[4].append("[Torso] Good: Proper tilt.")
     else:
         feedback[4].append("[Torso] Advice: Tilt more.")
-    if abs(angle_step5 - angle_step4) < 5:
+    if abs(angle_step5 - angle_step4) < 10:
         feedback[5].append("[Torso] Good: Angle maintained.")
     else:
         feedback[5].append("[Torso] Advice: Maintain angle.")
