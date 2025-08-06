@@ -122,6 +122,10 @@ def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
         feedback[3].append("[Foot] Advice: Feet should not be crossed.")
     return feedback
 
+def analyze_sliding_stability(marked_steps: list) -> dict:
+    """5스텝 안정성 분석 (현재는 빈 껍데기)."""
+    return {5: []} # Pydantic 모델에 맞게 빈 피드백 반환
+
 # --- 시각화 로직 (최신 analysis.py 기준) ---
 
 def visualize_analysis(video_path: str, marked_steps: list, torso_results: dict) -> Dict[str, str]:

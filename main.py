@@ -1,20 +1,33 @@
-from fastapi import FastAPI, File, UploadFile, Form, HTTPException
+from fastapi import FastAPI, File, UploadFile, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from typing import List
 import shutil
 import os
-from collections import defaultdict
+import asyncio
+from contextlib import asynccontextmanager
 
 from models import AnalysisResult, AnalysisFeedback
 import services
+from websocket_manager import manager, pubsub_manager
 
-app = FastAPI()
+# --- FastAPI 생명주기 이벤트 ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # 서버 시작 시
+    await pubsub_manager.connect_to_redis()
+    await pubsub_manager.subscribe()
+    # Redis 리스너를 백그라운드 태스크로 실행
+    redis_listener_task = asyncio.create_task(pubsub_manager.listen())
+    yield
+    # 서버 종료 시
+    print("Shutting down...")
+    redis_listener_task.cancel()
+    await pubsub_manager.close()
+
+app = FastAPI(lifespan=lifespan)
 
 # --- CORS 설정 ---
-origins = [
-    "http://localhost",
-    "http://localhost:3000",
-]
+origins = ["http://localhost", "http://localhost:3000"]
 app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
@@ -33,54 +46,50 @@ async def analyze_interactive_steps(
     video: UploadFile = File(...), 
     timestamps: List[float] = Form(...)
 ):
-    """
-    동영상 파일과 타임스탬프를 받아 자세를 분석하고 결과를 반환합니다.
-    """
+    """동영상과 타임스탬프를 받아 자세를 분석하고 결과를 반환합니다."""
     temp_video_path = os.path.join(TEMP_DIR, video.filename)
     try:
         with open(temp_video_path, "wb") as buffer:
             shutil.copyfileobj(video.file, buffer)
 
-        # 1. 랜드마크 데이터 추출
         marked_steps = services.extract_landmarks_from_timestamps(temp_video_path, timestamps)
         if not marked_steps or len(marked_steps) < 5:
             raise HTTPException(status_code=400, detail="Failed to detect pose in one or more steps.")
 
-        # 2. 모든 분석 수행
         torso_analysis = services.analyze_torso_angle(marked_steps)
         foot_analysis = services.analyze_foot_crossover_by_x(marked_steps)
-        # stability_analysis = services.analyze_sliding_stability(marked_steps) # 추후 추가 가능
-
-        # 3. 분석 결과 시각화
+        stability_analysis = services.analyze_sliding_stability(marked_steps)
         visualizations = services.visualize_analysis(temp_video_path, marked_steps, torso_analysis)
 
     except Exception as e:
+        print(f"An error occurred during analysis: {e}")
         raise HTTPException(status_code=500, detail=str(e))
     finally:
         if os.path.exists(temp_video_path):
             os.remove(temp_video_path)
 
-    # 4. 피드백 데이터 재구성
-    # defaultdict를 사용하여 스텝별로 모든 피드백을 통합
-    merged_feedback = defaultdict(list)
-    for step, feedback_list in torso_analysis.get("feedback", {}).items():
-        merged_feedback[step].extend(feedback_list)
-    for step, feedback_list in foot_analysis.items():
-        merged_feedback[step].extend(feedback_list)
-    # for step, feedback_list in stability_analysis.items():
-    #     merged_feedback[step].extend(feedback_list)
-
-    # Pydantic 모델에 맞게 최종 페이로드 생성
+    # Pydantic 모델이 기대하는 형식에 정확히 맞춰서 페이로드 구성
     feedback_payload = {
-        "torso": {k: v for k, v in merged_feedback.items() if any("[Torso]" in s for s in v)},
-        "foot": {k: v for k, v in merged_feedback.items() if any("[Foot]" in s for s in v)},
-        "stability": {} # 아직 안정성 분석이 없으므로 비워둠
+        "torso": torso_analysis.get("feedback", {}),
+        "foot": foot_analysis,
+        "stability": stability_analysis
     }
-
+    
     return AnalysisResult(
         feedback=AnalysisFeedback(**feedback_payload),
         visualizations=visualizations
     )
+
+@app.websocket("/ws/{client_id}")
+async def websocket_endpoint(websocket: WebSocket, client_id: str):
+    await manager.connect(websocket, client_id)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            await pubsub_manager.publish(f"Client #{client_id} says: {data}")
+    except WebSocketDisconnect:
+        manager.disconnect(client_id)
+        await pubsub_manager.publish(f"Client #{client_id} left the chat")
 
 @app.get("/")
 def read_root():
