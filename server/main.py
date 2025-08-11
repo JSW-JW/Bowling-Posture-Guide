@@ -1,14 +1,18 @@
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from typing import List
+from typing import List, Optional
 import shutil
 import os
 import asyncio
+import json
+import uuid
+from datetime import datetime
 from contextlib import asynccontextmanager
 
-from models import AnalysisResult, AnalysisFeedback
+from models import AnalysisResult, AnalysisFeedback, Room, RoomCreateRequest, RoomJoinRequest, RoomInfo, RoomType
 import services
 from websocket_manager import manager, pubsub_manager
+from room_manager import room_manager
 
 # --- FastAPI 생명주기 이벤트 ---
 @asynccontextmanager
@@ -80,16 +84,165 @@ async def analyze_interactive_steps(
         visualizations=visualizations
     )
 
-@app.websocket("/ws/{client_id}")
-async def websocket_endpoint(websocket: WebSocket, client_id: str):
-    await manager.connect(websocket, client_id)
+# Old WebSocket endpoint removed - now using room-based endpoint only
+
+# --- Room Management API ---
+@app.post("/rooms", response_model=Room)
+async def create_room(request: RoomCreateRequest):
+    """Create a new feedback room"""
+    room = room_manager.create_room(request)
+    return room
+
+@app.get("/rooms", response_model=List[Room])
+async def list_rooms(room_type: Optional[RoomType] = None):
+    """List all active rooms"""
+    rooms = room_manager.list_rooms(room_type=room_type)
+    return rooms
+
+@app.get("/rooms/{room_id}", response_model=RoomInfo)
+async def get_room_info(room_id: str):
+    """Get detailed room information"""
+    room = room_manager.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    users = manager.get_room_users(room_id)
+    
+    return RoomInfo(
+        room=room,
+        user_count=len(users),
+        users=users
+    )
+
+@app.post("/rooms/{room_id}/join")
+async def join_room(room_id: str, request: RoomJoinRequest):
+    """Join a room (Future: require authentication)"""
+    room = room_manager.get_room(room_id)
+    if not room:
+        raise HTTPException(status_code=404, detail="Room not found")
+    
+    if not room.is_active:
+        raise HTTPException(status_code=400, detail="Room is not active")
+    
+    # Future: Extract client_id from JWT token
+    # For now, return room info for client to connect via WebSocket
+    users = manager.get_room_users(room_id)
+    
+    return {
+        "success": True,
+        "room": room,
+        "user_count": len(users),
+        "websocket_url": f"/ws/{room_id}/{{client_id}}"
+    }
+
+@app.websocket("/ws/{room_id}/{client_id}")
+async def websocket_room_endpoint(websocket: WebSocket, room_id: str, client_id: str, username: str = None):
+    """WebSocket endpoint for room-based chat"""
+    # Validate room exists
+    room = room_manager.get_room(room_id)
+    if not room or not room.is_active:
+        await websocket.close(code=4004, reason="Room not found or inactive")
+        return
+    
+    username = username or f"User_{client_id[:8]}"
+    
+    # Join room in room manager
+    if not room_manager.join_room(client_id, room_id):
+        await websocket.close(code=4003, reason="Cannot join room (may be full)")
+        return
+    
+    # Connect to WebSocket manager
+    await manager.connect(websocket, client_id, username, room_id)
+    
+    # Subscribe to room's Redis channel
+    await pubsub_manager.subscribe_to_room(room_id)
+    
+    # Send room info to the new user
+    users = manager.get_room_users(room_id)
+    room_dict = room.dict()
+    room_dict['created_at'] = room.created_at.isoformat()  # Convert datetime to string
+    await manager.send_personal_message({
+        "type": "room_info",
+        "data": {
+            "room": room_dict,
+            "users": users,
+            "user_count": len(users)
+        }
+    }, client_id)
+    
+    # Broadcast user joined message
+    await pubsub_manager.publish_to_room({
+        "type": "user_joined",
+        "data": {
+            "client_id": client_id,
+            "username": username,
+            "message": f"{username}님이 {room.name}에 입장했습니다"
+        }
+    }, room_id)
+    
+    # Broadcast updated user list to room
+    await pubsub_manager.publish_to_room({
+        "type": "user_list",
+        "data": {"users": manager.get_room_users(room_id)}
+    }, room_id)
+    
     try:
         while True:
             data = await websocket.receive_text()
-            await pubsub_manager.publish(f"Client #{client_id} says: {data}")
+            try:
+                message_data = json.loads(data)
+                
+                if message_data.get("type") == "chat_message":
+                    chat_message = {
+                        "type": "message",
+                        "data": {
+                            "id": str(uuid.uuid4()),
+                            "room_id": room_id,
+                            "client_id": client_id,
+                            "username": manager.get_username(client_id),
+                            "message": message_data.get("message", ""),
+                            "timestamp": datetime.now().isoformat()
+                        }
+                    }
+                    await pubsub_manager.publish_to_room(chat_message, room_id)
+                    
+            except json.JSONDecodeError:
+                # Fallback for plain text messages
+                chat_message = {
+                    "type": "message",
+                    "data": {
+                        "id": str(uuid.uuid4()),
+                        "room_id": room_id,
+                        "client_id": client_id,
+                        "username": manager.get_username(client_id),
+                        "message": data,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                }
+                await pubsub_manager.publish_to_room(chat_message, room_id)
+                
     except WebSocketDisconnect:
+        username = manager.get_username(client_id)
+        
+        # Disconnect from managers
         manager.disconnect(client_id)
-        await pubsub_manager.publish(f"Client #{client_id} left the chat")
+        room_manager.leave_room(client_id)
+        
+        # Broadcast user left message
+        await pubsub_manager.publish_to_room({
+            "type": "user_left",
+            "data": {
+                "client_id": client_id,
+                "username": username,
+                "message": f"{username}님이 {room.name}에서 나갔습니다"
+            }
+        }, room_id)
+        
+        # Broadcast updated user list to room
+        await pubsub_manager.publish_to_room({
+            "type": "user_list",
+            "data": {"users": manager.get_room_users(room_id)}
+        }, room_id)
 
 @app.get("/")
 def read_root():
