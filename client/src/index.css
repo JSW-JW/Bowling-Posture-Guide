@@ -89,6 +89,38 @@ code {
   display: block;
 }
 
+.user-info {
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.username-display {
+  background: #444;
+  color: #61dafb;
+  padding: 4px 12px;
+  border-radius: 16px;
+  font-size: 0.9em;
+  font-weight: bold;
+  margin-right: 10px;
+}
+
+.room-btn {
+  background: #61dafb;
+  color: #282c34;
+  border: none;
+  padding: 6px 16px;
+  border-radius: 16px;
+  font-size: 0.9em;
+  font-weight: bold;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.room-btn:hover {
+  background: #88e1fb;
+  transform: translateY(-1px);
+}
+
 .visuals-container {
   width: 100%;
   max-width: 1400px; /* Increased max-width */

@@ -1,5 +1,7 @@
 // src/App.js
 import React, { useState, useRef, useEffect, useMemo } from 'react'; // useMemo import 추가
+import Chat from './components/Chat';
+import RoomSelection from './components/RoomSelection';
 
 function App() {
   // --- 상태 관리 ---
@@ -9,6 +11,17 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [error, setError] = useState('');
+  
+  // Chat and Room related states
+  const [isChatVisible, setIsChatVisible] = useState(true);
+  const [showRoomSelection, setShowRoomSelection] = useState(false);
+  const [currentRoom, setCurrentRoom] = useState(null);
+  const [clientId] = useState(() => `client_${Math.random().toString(36).substr(2, 9)}`);
+  const [username] = useState(() => {
+    // Generate unique username every time for testing room functionality  
+    const newUsername = `볼러${Math.floor(Math.random() * 1000)}_${Math.random().toString(36).substr(2, 4)}`;
+    return newUsername;
+  });
 
   const videoRef = useRef(null);
 
@@ -130,6 +143,24 @@ function App() {
   }, [analysisResult]); // analysisResult가 변경될 때만 이 로직을 다시 실행
 
 
+  // Chat and Room handlers
+  const handleChatToggle = () => {
+    setIsChatVisible(!isChatVisible);
+  };
+
+  const handleRoomSelect = (room) => {
+    setCurrentRoom(room);
+    setShowRoomSelection(false);
+  };
+
+  const handleLeaveRoom = () => {
+    setCurrentRoom(null);
+  };
+
+  const handleJoinRoomClick = () => {
+    setShowRoomSelection(true);
+  };
+
   // --- 렌더링 ---
   return (
     <>
@@ -142,6 +173,12 @@ function App() {
             <span className="key-chip">← : 뒤로 1프레임</span>
             <span className="key-chip">→ : 앞으로 1프레임</span>
             <span className="key-chip">s : 스텝 지정</span>
+          </div>
+          <div className="user-info">
+            <span className="username-display">👤 {username}</span>
+            <button className="room-btn" onClick={handleJoinRoomClick}>
+              {currentRoom ? `📍 ${currentRoom.name}` : '🚪 Feedback Room 입장'}
+            </button>
           </div>
         </header>
 
@@ -210,6 +247,23 @@ function App() {
             </div>
           </div>
         </div>
+      )}
+
+      <Chat
+        clientId={clientId}
+        username={username}
+        roomId={currentRoom?.id}
+        roomInfo={currentRoom}
+        isVisible={isChatVisible}
+        onToggle={handleChatToggle}
+        onLeaveRoom={handleLeaveRoom}
+      />
+
+      {showRoomSelection && (
+        <RoomSelection
+          onRoomSelect={handleRoomSelect}
+          onClose={() => setShowRoomSelection(false)}
+        />
       )}
     </>
   );
