@@ -1,9 +1,12 @@
 import React, { useState } from 'react';
 import { useRooms } from '../hooks/useRooms';
+import { useToast } from '../hooks/useToast';
+import ToastContainer from './ToastContainer';
 import './RoomSelection.css';
 
 const RoomSelection = ({ onRoomSelect, onClose }) => {
   const { rooms, loading, error, createRoom, fetchRooms } = useRooms();
+  const { toasts, showError, showSuccess, removeToast } = useToast();
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [newRoomName, setNewRoomName] = useState('');
   const [newRoomDescription, setNewRoomDescription] = useState('');
@@ -13,14 +16,14 @@ const RoomSelection = ({ onRoomSelect, onClose }) => {
     try {
       onRoomSelect(room);
     } catch (error) {
-      alert('방 참가에 실패했습니다: ' + error.message);
+      showError('방 참가에 실패했습니다: ' + error.message);
     }
   };
 
   const handleCreateRoom = async (e) => {
     e.preventDefault();
     if (!newRoomName.trim()) {
-      alert('방 이름을 입력해주세요.');
+      showError('방 이름을 입력해주세요.');
       return;
     }
 
@@ -37,9 +40,10 @@ const RoomSelection = ({ onRoomSelect, onClose }) => {
       setNewRoomName('');
       setNewRoomDescription('');
       setShowCreateForm(false);
+      showSuccess('방이 성공적으로 생성되었습니다.');
       onRoomSelect(newRoom);
     } catch (error) {
-      alert('방 생성에 실패했습니다: ' + error.message);
+      showError('방 생성에 실패했습니다: ' + error.message);
     } finally {
       setIsCreating(false);
     }
@@ -152,6 +156,7 @@ const RoomSelection = ({ onRoomSelect, onClose }) => {
           </div>
         </div>
       </div>
+      <ToastContainer toasts={toasts} removeToast={removeToast} />
     </div>
   );
 };
