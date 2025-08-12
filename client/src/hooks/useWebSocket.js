@@ -6,6 +6,9 @@ const useWebSocket = (clientId, username, roomId) => {
   const [roomInfo, setRoomInfo] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const ws = useRef(null);
+  const retryCount = useRef(0);
+  const maxRetries = useRef(5);
+  const retryTimeout = useRef(null);
 
   const connect = useCallback(() => {
     // Prevent duplicate connections
@@ -20,12 +23,14 @@ const useWebSocket = (clientId, username, roomId) => {
 
     try {
       console.log(`Connecting to room: ${roomId} as ${username}`);
-      const wsUrl = `ws://localhost:8000/ws/${roomId}/${clientId}?username=${encodeURIComponent(username)}`;
+      const wsBaseUrl = process.env.REACT_APP_WS_BASE_URL || 'ws://localhost:8000';
+      const wsUrl = `${wsBaseUrl}/ws/${roomId}/${clientId}?username=${encodeURIComponent(username)}`;
       ws.current = new WebSocket(wsUrl);
 
       ws.current.onopen = () => {
         console.log('WebSocket connected');
         setConnectionStatus('Connected');
+        retryCount.current = 0; // Reset retry count on successful connection
       };
 
       ws.current.onmessage = (event) => {
@@ -67,11 +72,23 @@ const useWebSocket = (clientId, username, roomId) => {
         }
       };
 
-      ws.current.onclose = () => {
-        console.log('WebSocket disconnected');
+      ws.current.onclose = (event) => {
+        console.log('WebSocket disconnected', event.code, event.reason);
         setConnectionStatus('Disconnected');
-        // Retry connection after 3 seconds
-        setTimeout(connect, 3000);
+        
+        // Only retry if not manually closed and under retry limit
+        if (event.code !== 1000 && retryCount.current < maxRetries.current) {
+          retryCount.current++;
+          const delay = Math.min(1000 * Math.pow(2, retryCount.current), 30000); // Exponential backoff with max 30s
+          console.log(`Retrying connection in ${delay}ms (attempt ${retryCount.current}/${maxRetries.current})`);
+          
+          retryTimeout.current = setTimeout(() => {
+            connect();
+          }, delay);
+        } else if (retryCount.current >= maxRetries.current) {
+          console.log('Max retry attempts reached');
+          setConnectionStatus('Failed');
+        }
       };
 
       ws.current.onerror = (error) => {
@@ -97,9 +114,14 @@ const useWebSocket = (clientId, username, roomId) => {
   }, []);
 
   const disconnect = useCallback(() => {
-    if (ws.current) {
-      ws.current.close();
+    if (retryTimeout.current) {
+      clearTimeout(retryTimeout.current);
+      retryTimeout.current = null;
     }
+    if (ws.current) {
+      ws.current.close(1000, 'User disconnected'); // Normal closure
+    }
+    retryCount.current = 0;
   }, []);
 
   // Clean up messages when room changes
