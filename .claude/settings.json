@@ -24,7 +24,8 @@
     "CLAUDE_BASH_MAINTAIN_PROJECT_WORKING_DIR": "1",
     "PYTHONPATH": "."
   },
-  "includeCoAuthoredBy": true,
+  "includeCoAuthoredBy": false,
+  "includeGeneratedWithClaudeCode": false,
   "cleanupPeriodDays": 30,
   "hooks": {}
 }
