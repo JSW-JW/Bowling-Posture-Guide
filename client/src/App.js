@@ -54,7 +54,8 @@ function App() {
     });
 
     try {
-      const API_URL = "http://127.0.0.1:8000/analyze/interactive-steps";
+      const API_BASE_URL = process.env.REACT_APP_API_BASE_URL || 'http://localhost:8000';
+      const API_URL = `${API_BASE_URL}/analyze/interactive-steps`;
       const response = await fetch(API_URL, {
         method: 'POST',
         body: formData,
