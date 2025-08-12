@@ -9,12 +9,8 @@ const RoomSelection = ({ onRoomSelect, onClose }) => {
   const [newRoomDescription, setNewRoomDescription] = useState('');
   const [isCreating, setIsCreating] = useState(false);
 
-  const handleJoinRoom = async (room) => {
-    try {
-      onRoomSelect(room);
-    } catch (error) {
-      alert('방 참가에 실패했습니다: ' + error.message);
-    }
+  const handleJoinRoom = (room) => {
+    onRoomSelect(room);
   };
 
   const handleCreateRoom = async (e) => {
