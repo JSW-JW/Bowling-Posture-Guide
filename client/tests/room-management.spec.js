@@ -25,7 +25,7 @@ test.describe('Room Management Features', () => {
     // Check if rooms list is visible (even if empty)
     await expect(page.locator(SELECTORS.EXISTING_ROOMS)).toBeVisible();
     await expect(page.locator(SELECTORS.EXISTING_ROOMS_TITLE))
-      .toHaveText(UI_TEXT.ROOM.EXISTING_ROOMS);
+      .toContainText(UI_TEXT.ROOM.EXISTING_ROOMS);
     
     // Should show loading or empty state initially
     const roomsList = page.locator(SELECTORS.ROOMS_LIST);
@@ -34,6 +34,9 @@ test.describe('Room Management Features', () => {
 
   test('should have create new room form', async ({ page }) => {
     await helpers.openRoomSelection();
+    
+    // Click create room button to show form
+    await page.locator(SELECTORS.CREATE_ROOM_BTN).click();
     
     // Check create room section
     await expect(page.locator(SELECTORS.CREATE_ROOM)).toBeVisible();
@@ -46,6 +49,10 @@ test.describe('Room Management Features', () => {
 
   test('should validate room creation form', async ({ page }) => {
     await helpers.openRoomSelection();
+    
+    // First open the create room form
+    await page.locator(SELECTORS.CREATE_ROOM_BTN).click();
+    await expect(page.locator(SELECTORS.CREATE_ROOM)).toBeVisible();
     
     // Try to submit empty form
     const createBtn = page.locator(SELECTORS.CREATE_SUBMIT_BTN);
@@ -77,7 +84,7 @@ test.describe('Room Management Features', () => {
   test('should handle room joining workflow', async ({ page }) => {
     // Create and join a room
     const roomName = TEST_DATA.ROOMS.BOWLING_FEEDBACK_ROOM;
-    await helpers.createRoom(roomName, '10');
+    await helpers.createRoom(roomName);
     
     // Verify we joined the room
     await expect(page.locator(SELECTORS.ROOM_BTN))
@@ -93,16 +100,34 @@ test.describe('Room Management Features', () => {
   test('should show loading states', async ({ page }) => {
     await helpers.openRoomSelection();
     
+    // Slow down the network to catch loading state
+    await page.route('**/rooms', async (route) => {
+      // Add 2 second delay to catch loading state
+      await page.waitForTimeout(2000);
+      route.continue();
+    });
+    
+    // First open the create room form
+    await page.locator(SELECTORS.CREATE_ROOM_BTN).click();
+    await expect(page.locator(SELECTORS.CREATE_ROOM)).toBeVisible();
+    
     // Create room form should handle loading state
     await page.locator(SELECTORS.ROOM_NAME_INPUT).fill('로딩 테스트');
-    await page.locator(SELECTORS.MAX_USERS_INPUT).fill('3');
     
     const submitBtn = page.locator(SELECTORS.CREATE_SUBMIT_BTN);
+    
+    // Check initial button text
+    await expect(submitBtn).toHaveText(UI_TEXT.ROOM.CREATE_BUTTON);
+    
+    // Click and check for loading state
     await submitBtn.click();
     
-    // Button should show loading or completed state
-    const buttonText = await submitBtn.textContent();
-    expect(buttonText).toMatch(new RegExp(`(${UI_TEXT.ROOM.CREATE_BUTTON}|${UI_TEXT.ROOM.CREATING_BUTTON})`));
+    // Now we should see the loading state because of the delayed network
+    await expect(submitBtn).toHaveText(UI_TEXT.ROOM.CREATING_BUTTON);
+    
+    // Wait for completion
+    await expect(page.locator(SELECTORS.ROOM_BTN))
+      .toContainText('로딩 테스트', { timeout: 10000 });
   });
 
   test('should handle API errors gracefully', async ({ page }) => {

@@ -152,8 +152,8 @@ export class TestHelpers {
   }
 
   async closeModalByBackdrop() {
-    const backdrop = this.page.locator(SELECTORS.ROOM_SELECTION);
-    await backdrop.click({ position: { x: 10, y: 10 } }); // Click near edge
+    const overlay = this.page.locator(SELECTORS.ROOM_SELECTION_OVERLAY);
+    await overlay.click({ position: { x: 10, y: 10 } }); // Click on overlay background
     await expect(this.page.locator(SELECTORS.ROOM_SELECTION)).toHaveCount(0);
   }
 
