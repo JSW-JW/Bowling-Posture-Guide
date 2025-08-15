@@ -24,9 +24,9 @@ const useWebSocket = (clientId, username, roomId) => {
     }
 
     // Clear any pending reconnection attempts
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
+    if (retryTimeout.current) {
+      clearTimeout(retryTimeout.current);
+      retryTimeout.current = null;
     }
 
     try {
