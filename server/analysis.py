@@ -18,7 +18,7 @@ def get_landmark_point(landmarks: landmark_pb2.NormalizedLandmarkList, index: in
     return np.array([landmarks.landmark[index].x, landmarks.landmark[index].y])
 
 def calculate_torso_tilt_from_image(landmarks) -> float:
-    """상체의 좌우 기울기를 계산합니다. (이미지 좌표 기준, 오른쪽 기울수록 양수)"""
+    """Calculate torso tilt angle. Positive values indicate right tilt."""
     shoulder_l = get_landmark_point(landmarks, LEFT_SHOULDER)
     shoulder_r = get_landmark_point(landmarks, RIGHT_SHOULDER)
     hip_l = get_landmark_point(landmarks, LEFT_HIP)
@@ -30,7 +30,7 @@ def calculate_torso_tilt_from_image(landmarks) -> float:
     return angle
 
 def analyze_torso_angle(marked_steps: list) -> dict:
-    """상체 각도를 분석하고 스텝별 피드백과 각도 값을 반환합니다."""
+    """Analyze torso angles and return step-wise feedback and angle values."""
     feedback = {2: [], 3: [], 4: [], 5: []}
     angles = {}
     try:
@@ -62,21 +62,9 @@ def analyze_torso_angle(marked_steps: list) -> dict:
         feedback[5].append("[Torso] Advice: Maintain angle.")
     return {"feedback": feedback, "angles": angles}
 
-# 랜드마크 인덱스 정의
-LEFT_SHOULDER = 11
-RIGHT_SHOULDER = 12
+# Additional landmark indices
 LEFT_KNEE = 25
 RIGHT_KNEE = 26
-LEFT_ANKLE = 27
-RIGHT_ANKLE = 28
-
-import numpy as np
-
-# 랜드마크 인덱스 정의
-LEFT_HIP = 23
-RIGHT_HIP = 24
-LEFT_ANKLE = 27
-RIGHT_ANKLE = 28
 
 def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
     """
@@ -115,15 +103,14 @@ def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
         # 정규화 기준을 '골반 너비'로 변경
         hip_width = abs(lm[LEFT_HIP].x - lm[RIGHT_HIP].x)
         
-        # crossover_distance = right_ankle_x - left_ankle_x
-        # crossover_distance = right_ankle_x - left_ankle_x
-        # crossover_ratio = (crossover_distance / hip_width) if hip_width > 0 else 0
+        # Future: implement proper crossover ratio calculation
+        # crossover_ratio = (right_ankle_x - left_ankle_x) / hip_width if hip_width > 0 else 0
         
         # if min_crossover_threshold <= crossover_ratio <= max_crossover_threshold:
         if left_foot_x + 0.08 < right_ankle_x:
-            feedback[step_num].append(f"[Foot] Advice: {step_num}, left_foot_x: {left_foot_x} right_ankle_x: {right_ankle_x}")
+            feedback[step_num].append(f"[Foot] Advice: Crossover needed more.")
         else:
-            feedback[step_num].append(f"[Foot] Good: Step {step_num} crossover is sufficient, left_foot_x: {left_foot_x} right_ankle_x: {right_ankle_x}")
+            feedback[step_num].append(f"[Foot] Good: Crossover is sufficient.")
 
     # --- 3스텝 (교차 안 함) 로직 ---
     lm3 = landmarks_dict[3]
@@ -138,7 +125,7 @@ def analyze_foot_crossover_by_x(marked_steps: list) -> dict:
     return feedback
 
 def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_results: dict):
-    """스텝 2, 3, 4, 5의 프레임 위에 몸통 벡터와 각도를 그려 시각화합니다."""
+    """Visualize torso analysis on video frames for steps 2-5."""
     annotated_images = []
     angles = analysis_results.get('angles', {})
     cap = cv2.VideoCapture(video_path)
