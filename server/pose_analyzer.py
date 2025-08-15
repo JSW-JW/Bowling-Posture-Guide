@@ -1,3 +1,13 @@
+"""
+Standalone Pose Analysis Tool
+
+This module provides an interactive GUI tool for manual step segmentation 
+and pose analysis of bowling videos. It's separate from the main FastAPI 
+application and used for testing and development purposes.
+
+Usage: Run this script directly to analyze bowling videos interactively.
+"""
+
 import cv2
 import mediapipe as mp
 import time
