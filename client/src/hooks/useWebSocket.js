@@ -6,19 +6,27 @@ const useWebSocket = (clientId, username, roomId) => {
   const [roomInfo, setRoomInfo] = useState(null);
   const [connectionStatus, setConnectionStatus] = useState('Disconnected');
   const ws = useRef(null);
+  const isMounted = useRef(true); // ✅ cleanup을 위한 마운트 상태 추적
   const retryCount = useRef(0);
   const maxRetries = useRef(5);
   const retryTimeout = useRef(null);
 
   const connect = useCallback(() => {
     // Prevent duplicate connections
-    if (ws.current?.readyState === WebSocket.OPEN || !roomId) {
+    if (ws.current?.readyState === WebSocket.OPEN || !roomId || !isMounted.current) {
+      console.log("log 1")
       return;
     }
 
     // Close any existing connection first
     if (ws.current) {
       ws.current.close();
+    }
+
+    // Clear any pending reconnection attempts
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
     }
 
     try {
@@ -29,11 +37,15 @@ const useWebSocket = (clientId, username, roomId) => {
 
       ws.current.onopen = () => {
         console.log('WebSocket connected');
-        setConnectionStatus('Connected');
+        if (isMounted.current) { // ✅ 마운트 상태 체크
+          setConnectionStatus('Connected');
+        }
         retryCount.current = 0; // Reset retry count on successful connection
       };
 
       ws.current.onmessage = (event) => {
+        if (!isMounted.current) return; // ✅ 언마운트된 경우 조기 리턴
+        
         try {
           const data = JSON.parse(event.data);
           
@@ -74,31 +86,39 @@ const useWebSocket = (clientId, username, roomId) => {
 
       ws.current.onclose = (event) => {
         console.log('WebSocket disconnected', event.code, event.reason);
-        setConnectionStatus('Disconnected');
-        
-        // Only retry if not manually closed and under retry limit
-        if (event.code !== 1000 && retryCount.current < maxRetries.current) {
-          retryCount.current++;
-          const delay = Math.min(1000 * Math.pow(2, retryCount.current), 30000); // Exponential backoff with max 30s
-          console.log(`Retrying connection in ${delay}ms (attempt ${retryCount.current}/${maxRetries.current})`);
+        if (isMounted.current) { // ✅ 마운트 상태 체크
+          setConnectionStatus('Disconnected');
           
-          retryTimeout.current = setTimeout(() => {
-            connect();
-          }, delay);
-        } else if (retryCount.current >= maxRetries.current) {
-          console.log('Max retry attempts reached');
-          setConnectionStatus('Failed');
+          // Only retry if not manually closed and under retry limit and component is mounted
+          if (event.code !== 1000 && retryCount.current < maxRetries.current && roomId) {
+            retryCount.current++;
+            const delay = Math.min(1000 * Math.pow(2, retryCount.current), 30000); // Exponential backoff with max 30s
+            console.log(`Retrying connection in ${delay}ms (attempt ${retryCount.current}/${maxRetries.current})`);
+            
+            retryTimeout.current = setTimeout(() => {
+              if (isMounted.current) { // 재연결 시에도 마운트 상태 재확인
+                connect();
+              }
+            }, delay);
+          } else if (retryCount.current >= maxRetries.current) {
+            console.log('Max retry attempts reached');
+            setConnectionStatus('Failed');
+          }
         }
       };
 
       ws.current.onerror = (error) => {
         console.error('WebSocket error:', error);
-        setConnectionStatus('Error');
+        if (isMounted.current) { // ✅ 마운트 상태 체크
+          setConnectionStatus('Error');
+        }
       };
 
     } catch (error) {
       console.error('Error creating WebSocket connection:', error);
-      setConnectionStatus('Error');
+      if (isMounted.current) { // ✅ 마운트 상태 체크
+        setConnectionStatus('Error');
+      }
     }
   }, [clientId, username, roomId]);
 
@@ -114,35 +134,55 @@ const useWebSocket = (clientId, username, roomId) => {
   }, []);
 
   const disconnect = useCallback(() => {
+    // ✅ 재연결 타이머 정리 (both retry and reconnect timeouts)
     if (retryTimeout.current) {
       clearTimeout(retryTimeout.current);
       retryTimeout.current = null;
     }
+    
+    // ✅ WebSocket 연결 정리
     if (ws.current) {
       ws.current.close(1000, 'User disconnected'); // Normal closure
+      ws.current = null;
     }
     retryCount.current = 0;
   }, []);
 
   // Clean up messages when room changes
   useEffect(() => {
-    setMessages([]);
-    setUsers([]);
-    setRoomInfo(null);
+    if (isMounted.current) { // ✅ 마운트 상태 체크
+      setMessages([]);
+      setUsers([]);
+      setRoomInfo(null);
+    }
   }, [roomId]);
 
+  // Connection effect - handles room changes
   useEffect(() => {
+    // ✅ effect 시작 시 마운트 상태 재설정
+    isMounted.current = true;
+    
+    console.log("🔍 useEffect triggered - roomId:", roomId, "type:", typeof roomId);
     if (roomId) {
+      console.log("✅ Connecting to room:", roomId);
       connect();
     } else {
+      console.log("❌ No roomId, disconnecting...");
       disconnect();
-      setConnectionStatus('Disconnected');
+      if (isMounted.current) { // ✅ 마운트 상태 체크
+        setConnectionStatus('Disconnected');
+      }
     }
-    
+  }, [connect, disconnect, roomId]);
+
+  // Cleanup effect - only runs on component unmount
+  useEffect(() => {
     return () => {
+      // ✅ 언마운트 시에만 마운트 상태 변경 및 리소스 정리
+      isMounted.current = false;
       disconnect();
     };
-  }, [connect, disconnect, roomId]);
+  }, []); // 빈 의존성 배열 = 마운트/언마운트 시에만 실행
 
   return {
     messages,
