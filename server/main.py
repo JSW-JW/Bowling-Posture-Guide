@@ -72,7 +72,7 @@ async def analyze_interactive_steps(
         if os.path.exists(temp_video_path):
             os.remove(temp_video_path)
 
-    # Pydantic 모델이 기대하는 형식에 정확히 맞춰서 페이로드 구성
+    # Build payload for Pydantic model
     feedback_payload = {
         "torso": torso_analysis.get("feedback", {}),
         "foot": foot_analysis,
@@ -84,7 +84,6 @@ async def analyze_interactive_steps(
         visualizations=visualizations
     )
 
-# Old WebSocket endpoint removed - now using room-based endpoint only
 
 # --- Room Management API ---
 @app.post("/rooms", response_model=Room)
@@ -160,7 +159,7 @@ async def websocket_room_endpoint(websocket: WebSocket, room_id: str, client_id:
     # Send room info to the new user
     users = manager.get_room_users(room_id)
     room_dict = room.dict()
-    room_dict['created_at'] = room.created_at.isoformat()  # Convert datetime to string
+    room_dict['created_at'] = room.created_at.isoformat()  # Convert datetime for JSON serialization
     await manager.send_personal_message({
         "type": "room_info",
         "data": {

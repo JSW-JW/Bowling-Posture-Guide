@@ -119,7 +119,7 @@ class RedisPubSubManager:
     async def publish_to_room(self, message: dict, room_id: str):
         """Publish message to a specific room channel"""
         if not self.redis_client:
-            # Redis 연결이 없는 경우, 로컬 브로드캐스트만 수행 (Graceful fallback)
+            # Graceful fallback: local broadcast only when Redis unavailable
             await self.manager.broadcast_to_room(message, room_id)
             return
         
@@ -171,7 +171,7 @@ class RedisPubSubManager:
                 break
             except Exception as e:
                 print(f"Error in Redis listener: {e}")
-                await asyncio.sleep(1) # 재연결 시도 전 잠시 대기
+                await asyncio.sleep(1)  # Wait before retry
 
     async def close(self):
         if self.pubsub:
