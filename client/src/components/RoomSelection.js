@@ -49,8 +49,14 @@ const RoomSelection = ({ onRoomSelect, onClose }) => {
     return new Date(dateString).toLocaleString('ko-KR');
   };
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
+
   return (
-    <div className="room-selection-overlay">
+    <div className="room-selection-overlay" onClick={handleOverlayClick}>
       <div className="room-selection-modal">
         <div className="room-selection-header">
           <h2>🎳 Feedback Room 선택</h2>
