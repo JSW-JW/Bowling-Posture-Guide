@@ -178,11 +178,11 @@ const useWebSocket = (clientId, username, roomId) => {
   // Cleanup effect - only runs on component unmount
   useEffect(() => {
     return () => {
-      // ✅ 언마운트 시에만 마운트 상태 변경 및 리소스 정리
       isMounted.current = false;
       disconnect();
     };
-  }, []); // 빈 의존성 배열 = 마운트/언마운트 시에만 실행
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return {
     messages,
