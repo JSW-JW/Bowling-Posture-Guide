@@ -1,0 +1,32 @@
+[
+  {
+    "step_number": 1,
+    "foot": "left",
+    "completion_frame": 19,
+    "completion_timestamp": 0.31666666666666665
+  },
+  {
+    "step_number": 2,
+    "foot": "right",
+    "completion_frame": 70,
+    "completion_timestamp": 1.1666666666666667
+  },
+  {
+    "step_number": 3,
+    "foot": "left",
+    "completion_frame": 113,
+    "completion_timestamp": 1.8833333333333333
+  },
+  {
+    "step_number": 4,
+    "foot": "right",
+    "completion_frame": 124,
+    "completion_timestamp": 2.066666666666667
+  },
+  {
+    "step_number": 5,
+    "foot": "left",
+    "completion_frame": 146,
+    "completion_timestamp": 2.433333333333333
+  }
+]
