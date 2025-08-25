@@ -162,7 +162,7 @@ def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_resul
             landmark = image_landmarks.landmark[landmark_enum.value]
             cx = int(landmark.x * w)
             cy = int(landmark.y * h)
-            cv2.circle(frame, (cx, cy), 10, color, -1)
+            cv2.circle(frame, (cx, cy), 3, color, -1)
 
         shoulder_l = image_landmarks.landmark[LEFT_SHOULDER]
         shoulder_r = image_landmarks.landmark[RIGHT_SHOULDER]
@@ -172,8 +172,8 @@ def visualize_torso_analysis(video_path: str, marked_steps: list, analysis_resul
         hip_mid_px = (int((hip_l.x + hip_r.x) * w / 2), int((hip_l.y + hip_r.y) * h / 2))
 
         cv2.line(frame, hip_mid_px, shoulder_mid_px, (0, 255, 255), 3)
-        cv2.circle(frame, hip_mid_px, 7, (0, 0, 255), -1)
-        cv2.circle(frame, shoulder_mid_px, 7, (255, 0, 0), -1)
+        cv2.circle(frame, hip_mid_px, 5, (0, 0, 255), -1)
+        cv2.circle(frame, shoulder_mid_px, 5, (255, 0, 0), -1)
         
         angle = angles.get(step_num)
         if angle is not None:

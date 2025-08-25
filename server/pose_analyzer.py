@@ -44,6 +44,12 @@ def user_driven_step_segmentation(video_path):
     font_scale = height / 1080.0  # 1080p를 기준으로 폰트 크기 조절
     line_thickness = max(1, int(font_scale * 2))
 
+    # 비디오 FPS를 가져와서 적절한 딜레이 계산 (0.7배 속도)
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    if fps == 0:
+        fps = 30  # 기본값
+    frame_delay = int((1000 / fps) / 0.7)  # 0.7배 속도를 위한 딜레이 (ms)
+
     while cap.isOpened():
         if not paused:
             ret, frame = cap.read()
@@ -62,7 +68,7 @@ def user_driven_step_segmentation(video_path):
         cv2.putText(display_image, f"Current Step: {current_step}/5", (10, 70), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), line_thickness, cv2.LINE_AA)
         cv2.imshow('Bowling Step Marking', display_image)
 
-        key = cv2.waitKey(0 if paused else 30) & 0xFF
+        key = cv2.waitKey(0 if paused else frame_delay) & 0xFF
 
         if key == ord('q'):
             break
@@ -241,7 +247,7 @@ def replay_step_segments(video_path, steps_data, all_analysis):
         
         if last_frame_in_segment is not None:
             cv2.imshow('Segment Replay', last_frame_in_segment)
-            cv2.waitKey(2000)
+            cv2.waitKey(300)
             
             final_y_pos = last_frame_in_segment.shape[0] - int(30 * font_scale)
             cv2.putText(last_frame_in_segment, "Press 'n' for next, 'q' to quit", (10, final_y_pos), cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 0, 255), line_thickness, cv2.LINE_AA)
